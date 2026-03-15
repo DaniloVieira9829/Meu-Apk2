@@ -7,11 +7,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extrair pastas (se houver ZIPs)
+      - name: Extrair Tudo e Corrigir Pastas
         run: |
-          # Se você subiu a pasta client como client.zip, ele extrai aqui
-          if [ -f "client.zip" ]; then unzip -o client.zip; fi
-          if [ -f "projeto.zip" ]; then unzip -o projeto.zip; fi
+          # Extrai o projeto e os patches
+          unzip -o projeto.zip || true
+          unzip -o patches.zip || true
+          
+          # TRUQUE: Se os patches estiverem numa pasta chamada 'patches', 
+          # mas o ZIP criou outra pasta 'patches' dentro, isso resolve:
+          if [ -d "patches" ]; then
+            echo "Pasta patches encontrada."
+          else
+            # Tenta localizar onde o package.json e a pasta patches foram parar
+            find . -name "package.json" -exec sh -c 'mv "$(dirname "{}")"/* .' \; || true
+          fi
+          ls -R patches # Mostra pro suporte (eu) se os arquivos estão lá
 
       - name: Configurar Node e PNPM
         uses: actions/setup-node@v4
@@ -21,15 +31,14 @@ jobs:
       - name: Instalar Dependencias
         run: |
           npm install -g pnpm
-          pnpm install --no-frozen-lockfile
+          # O segredo: instalamos ignorando os scripts primeiro para não travar no patch
+          pnpm install --no-frozen-lockfile --ignore-scripts
           pnpm run build --if-present
 
       - name: Preparar Capacitor
         run: |
           pnpm add @capacitor/core @capacitor/cli @capacitor/android
           mkdir -p dist
-          # Se o seu build gerou arquivos em outra pasta, movemos para 'dist'
-          cp -r client/dist/* dist/ 2>/dev/null || true
           npx cap init "MeuApp" "com.meu.app" --web-dir dist
           npx cap add android
           npx cap copy android
@@ -43,7 +52,6 @@ jobs:
       - name: Compilar APK
         run: |
           cd android
-          # Dá permissão para o executor do Android
           chmod +x gradlew
           ./gradlew assembleDebug
 
