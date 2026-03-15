@@ -7,40 +7,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extrair Arquivos
+      - name: Extrair e Organizar
         run: |
-          # Extrai todos os zips que você subiu
           unzip -o projeto.zip || true
           unzip -o client.zip || true
           unzip -o patches.zip || true
-          
-          # Se os arquivos estiverem numa subpasta, move para a raiz
-          find . -maxdepth 2 -name "package.json" -exec sh -c 'mv "$(dirname "{}")"/* . 2>/dev/null' \; || true
-          
-          # CRUCIAL: Se a pasta client não existir, cria ela e garante que tenha um index.html
-          mkdir -p client
-          if [ ! -f "client/index.html" ] && [ -f "index.html" ]; then
-            cp index.html client/index.html
-          fi
+          # Se os arquivos estiverem dentro de uma pasta 'client', move o index para a raiz se necessário
+          if [ -f "client/index.html" ] && [ ! -f "index.html" ]; then cp client/index.html .; fi
 
-      - name: Configurar Node
+      - name: Configurar Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-      
+          node-version: 22 # Atualizado para a versão que o Capacitor exige
+
       - name: Instalar e Build
         run: |
           npm install -g pnpm
           pnpm install --no-frozen-lockfile --ignore-scripts
-          # Tenta o build. Se falhar por falta de arquivo, o próximo passo contorna
-          pnpm run build || echo "Build falhou, mas tentaremos seguir com o Capacitor"
+          # Tenta rodar o build. Se falhar, criamos a pasta dist manualmente
+          pnpm run build || mkdir -p dist
 
       - name: Preparar Capacitor
         run: |
-          pnpm add @capacitor/core @capacitor/cli @capacitor/android
-          # O Capacitor precisa de uma pasta com o site. Se o build falhou, usamos a pasta client
+          pnpm add @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          # Garante que a pasta 'dist' tenha o conteúdo do seu site
           mkdir -p dist
-          cp -r client/* dist/ 2>/dev/null || true
+          if [ -d "client/dist" ]; then cp -r client/dist/* dist/; fi
+          if [ -f "client/index.html" ] && [ ! -f "dist/index.html" ]; then cp -r client/* dist/; fi
+          
           npx cap init "MeuApp" "com.meu.app" --web-dir dist
           npx cap add android
           npx cap copy android
@@ -60,6 +54,8 @@ jobs:
       - name: Download do APK
         uses: actions/upload-artifact@v4
         with:
+          name: meu-projeto-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           name: meu-projeto-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           
