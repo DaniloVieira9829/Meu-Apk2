@@ -7,40 +7,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configurar Node
+      - name: Extrair pastas (se houver ZIPs)
+        run: |
+          # Se você subiu a pasta client como client.zip, ele extrai aqui
+          if [ -f "client.zip" ]; then unzip -o client.zip; fi
+          if [ -f "projeto.zip" ]; then unzip -o projeto.zip; fi
+
+      - name: Configurar Node e PNPM
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Instalar pnpm
-        run: npm install -g pnpm
-
-      - name: Instalar e Build (Dentro da pasta client)
+      
+      - name: Instalar Dependencias
         run: |
-          # Se os arquivos estiverem na raiz, ele usa a raiz. Se estiverem no client, ele entra lá.
-          if [ -d "client" ]; then cd client; fi
-          pnpm install
-          pnpm run build
-          # Move o resultado para onde o Capacitor espera
-          mkdir -p ../dist
-          cp -r dist/* ../dist/ || cp -r build/* ../dist/ || true
+          npm install -g pnpm
+          pnpm install --no-frozen-lockfile
+          pnpm run build --if-present
 
-      - name: Configurar Capacitor e Android
+      - name: Preparar Capacitor
         run: |
           pnpm add @capacitor/core @capacitor/cli @capacitor/android
+          mkdir -p dist
+          # Se o seu build gerou arquivos em outra pasta, movemos para 'dist'
+          cp -r client/dist/* dist/ 2>/dev/null || true
           npx cap init "MeuApp" "com.meu.app" --web-dir dist
           npx cap add android
           npx cap copy android
 
-      - name: Gerar o APK
+      - name: Configurar Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Compilar Final
+      - name: Compilar APK
         run: |
           cd android
+          # Dá permissão para o executor do Android
           chmod +x gradlew
           ./gradlew assembleDebug
 
