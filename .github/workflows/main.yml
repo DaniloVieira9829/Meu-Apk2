@@ -7,12 +7,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extrair Projeto
+      - name: Listar e Extrair
         run: |
-          unzip projeto.zip
-          # Move tudo de dentro de subpastas para a raiz, se necessário
-          find . -maxdepth 2 -name "package.json" -exec dirname {} + | xargs -I {} mv {}/* . || true
-
+          echo "Verificando arquivos no repositório:"
+          ls -R
+          # Tenta descompactar qualquer arquivo .zip que encontrar
+          unzip *.zip || echo "Nenhum zip encontrado"
+          
+      - name: Localizar Projeto e Mover
+        run: |
+          # Procura onde está o package.json e move tudo para a raiz
+          CAMINHO=$(find . -name "package.json" -not -path "*/node_modules/*" | head -n 1)
+          DIRETORIO=$(dirname $CAMINHO)
+          echo "Projeto encontrado em: $DIRETORIO"
+          cp -rn $DIRETORIO/. . || true
+          
       - name: Configurar Node
         uses: actions/setup-node@v4
         with:
@@ -21,24 +30,25 @@ jobs:
       - name: Instalar pnpm e Dependencias
         run: |
           npm install -g pnpm
-          pnpm install
-          # Tentativa de build ignorando erros de lint/typescript para garantir o APK
+          pnpm install --no-frozen-lockfile
           pnpm run build --if-present
 
-      - name: Criar Estrutura Android
+      - name: Configurar Capacitor e Android
         run: |
           pnpm add @capacitor/core @capacitor/cli @capacitor/android
+          # Se não existir a pasta dist, cria uma vazia para não dar erro no init
+          mkdir -p dist
           npx cap init "MeuApp" "com.meu.app" --web-dir dist
           npx cap add android
           npx cap copy android
 
-      - name: Gerar o APK (Java)
+      - name: Gerar o APK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Compilar
+      - name: Compilar Final
         run: |
           cd android
           chmod +x gradlew
