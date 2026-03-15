@@ -1,0 +1,52 @@
+name: Criar Meu APK Final
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar pnpm
+        run: npm install -g pnpm
+
+      - name: Instalar e Build (Dentro da pasta client)
+        run: |
+          # Se os arquivos estiverem na raiz, ele usa a raiz. Se estiverem no client, ele entra lá.
+          if [ -d "client" ]; then cd client; fi
+          pnpm install
+          pnpm run build
+          # Move o resultado para onde o Capacitor espera
+          mkdir -p ../dist
+          cp -r dist/* ../dist/ || cp -r build/* ../dist/ || true
+
+      - name: Configurar Capacitor e Android
+        run: |
+          pnpm add @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "MeuApp" "com.meu.app" --web-dir dist
+          npx cap add android
+          npx cap copy android
+
+      - name: Gerar o APK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Compilar Final
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Download do APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: meu-projeto-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          
